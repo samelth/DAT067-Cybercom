@@ -8,11 +8,11 @@ int status = WL_IDLE_STATUS; //WiFi radio status
 
 unsigned int localPort = 2390;      // local port to listen for UDP packets
 
-IPAddress timeServer(188, 149, 54, 45); // Victor's echo server
+IPAddress server(188, 149, 54, 45); // Victor's echo server
 const int PACKET_SIZE = 48; // NTP time stamp is in the first 48 bytes of the message
 byte packetBuffer[PACKET_SIZE]; //buffer to hold incoming and outgoing packets
 WiFiUDP Udp;
-WiFiClient client;
+
 
 
 void setup() {
@@ -44,21 +44,21 @@ void setup() {
   printCurrentNet();
 
   Serial.println("\nStarting connection to server...");
-  if(client.connect(timeServer, localPort)){
+  if(Udp.begin(localPort)){
     Serial.println("\nConnected to server!");
   }
 
 }
 
 void loop() {
-  sendNTPpacket(timeServer); // send an NTP packet to a time server
+  sendNTPpacket(server); // send an NTP packet to a time server
   // wait to see if a reply is available
   delay(3000);
-  if ( client.available()!=0 ) {
+  if ( Udp.parsePacket()!=0 ) {
       
     // We've received a packet
     Serial.println("packet received");
-    int chars = client.read(packetBuffer, PACKET_SIZE); // read the packet into the buffer
+    int chars = Udp.read(packetBuffer, PACKET_SIZE); // read the packet into the buffer
     /*
      * Convert the bytes to printable characters and print them.
      * Terminate either on number of characters actually received 
@@ -98,9 +98,9 @@ unsigned long sendNTPpacket(IPAddress& address)
   packetBuffer[counter++]  = 'F';
   packetBuffer[counter++]  = 'i';
 
-  //client.beginWrite();
-  client.write(packetBuffer, PACKET_SIZE);
-  //client.endWrite();
+  Udp.beginPacket(address, localPort);
+  Udp.write(packetBuffer, PACKET_SIZE);
+  Udp.endPacket();
   Serial.println("packet sent");
 }
 
