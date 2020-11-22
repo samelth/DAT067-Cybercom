@@ -19,11 +19,10 @@ final class DatabaseCommunicator {
         conn.close();
     }
     static String getMessage(final int packageID) throws SQLException {
-        String message = "";
+        String message = "ERROR couldn't find message";
         final String query = "SELECT * FROM Messages WHERE packetID= ?";
         final Connection conn = establishConnection();
         PreparedStatement ps = conn.prepareStatement(query);
-        System.out.println(packageID);
         ps.setInt(1, packageID);
         ResultSet rs = ps.executeQuery();
 
