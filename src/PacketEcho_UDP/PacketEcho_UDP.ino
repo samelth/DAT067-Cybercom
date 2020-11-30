@@ -9,6 +9,8 @@ unsigned int localPort = 2390;      // Local port to listen for UDP packets
 
 IPAddress VictorServer(188, 149, 54, 45); // Victor's echo server
 IPAddress SamuelServer(83, 252, 118, 131); // Samuel's echo server
+IPAddress KarlServer(85, 230, 107, 67); // Karl's echo server
+
 const int PACKET_SIZE = 128;
 
 byte packetBuffer[PACKET_SIZE]; //buffer to hold incoming and outgoing packets
