@@ -1,4 +1,3 @@
-
 #include <MKRNB.h>
 
 #include "arduino_secrets.h"
@@ -10,7 +9,6 @@ unsigned int localPort = 2390;      // Local port to listen for UDP packets
 
 IPAddress VictorServer(188, 149, 54, 45); // Victor's echo server
 IPAddress SamuelServer(83, 252, 118, 131); // Samuel's echo server
-IPAddress KarlServer(85, 230, 107, 67); // Karl's echo server
 const int PACKET_SIZE = 128;
 
 byte packetBuffer[PACKET_SIZE]; //buffer to hold incoming and outgoing packets
@@ -19,6 +17,9 @@ byte packetBuffer[PACKET_SIZE]; //buffer to hold incoming and outgoing packets
 GPRS gprs;
 NB nbAccess;
 NBScanner scanner;
+
+//If current IP address is equal to this nullIP we need to reconnect before we send any data.
+IPAddress nullIP= IPAddress(0,0,0,0);
 
 //Packet identifiers
 char packetNr0='0';
@@ -70,10 +71,15 @@ void loop()
       }
     }
   }
+  if(gprs.getIPAddress()== nullIP){
+    Serial.print("Connection lost.\n");
+    connect();
+    }
+  Serial.print("");
   
-  sendUDPpacket(KarlServer); //Send an UDP packet to an echo server.
+  sendUDPpacket(SamuelServer); //Send an UDP packet to an echo server.
   delay(2000); //Wait two seconds
-
+  
  
   while ( Udp.parsePacket()!=0 ) {  //If there are incoming packets on buffer, print them FCFS.
     Serial.print("Received ");
@@ -159,7 +165,7 @@ void connect(){
         (gprs.attachGPRS() == GPRS_READY)) {
       connected = true;
     } else {
-      Serial.println("Not connected");
+      Serial.println("Not connected, trying again..");
       delay(1000);
     }
   }
