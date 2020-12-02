@@ -10,10 +10,12 @@ unsigned int localPort = 2390;      // Local port to listen for UDP packets
 IPAddress VictorServer(188, 149, 54, 45); // Victor's echo server
 IPAddress SamuelServer(83, 252, 118, 131); // Samuel's echo server
 IPAddress KarlServer(85, 230, 107, 67); // Karl's echo server
+IPAddress WilliamsServer(188,148,194,26); // William's echo server
 
 const int PACKET_SIZE = 128;
 
-byte packetBuffer[PACKET_SIZE]; //buffer to hold incoming and outgoing packets
+byte packetSendBuffer[PACKET_SIZE]; //buffer to hold incoming and outgoing packets
+byte packetReceiveBuffer[PACKET_SIZE];
 
 // Initialize the library instance
 GPRS gprs;
@@ -22,6 +24,7 @@ NBScanner scanner;
 
 //If current IP address is equal to this nullIP we need to reconnect before we send any data.
 IPAddress nullIP= IPAddress(0,0,0,0);
+int timer=10;
 
 //Packet identifiers
 char packetNr0='0';
@@ -42,7 +45,10 @@ void setup()
   connect();
   Serial.println("\nStarting connection to server...");
   Udp.begin(localPort);
+  sendUDPpacket(SamuelServer); //Send an UDP packet to an echo server.
 }
+
+
 
 void loop()
 {
@@ -79,13 +85,11 @@ void loop()
     }
   Serial.print("");
   
-  sendUDPpacket(SamuelServer); //Send an UDP packet to an echo server.
-  delay(2000); //Wait two seconds
   
- 
-  while ( Udp.parsePacket()!=0 ) {  //If there are incoming packets on buffer, print them FCFS.
+  delay(500); //Wait two seconds
+   if(Udp.parsePacket()!=0) {  //If there are incoming packets on buffer, print them FCFS.
     Serial.print("Received ");
-    int chars = Udp.read(packetBuffer, PACKET_SIZE); // Read the packet into the buffer
+    int chars = Udp.read(packetReceiveBuffer, PACKET_SIZE); // Read the packet into the buffer
     /*
      * Convert the bytes to printable characters and print them.
      * Terminate either on number of characters actually received 
@@ -93,39 +97,51 @@ void loop()
      * Both conditions are needed here to avoid out of bounds
      * access of data.
      */
-    for(int i=0;i<chars && packetBuffer[i] > 0;i++)
+    for(int i=0;i<chars && packetReceiveBuffer[i] > 0;i++)
     {
       char b1[2];
-      sprintf(b1, "%c", packetBuffer[i]);
+      sprintf(b1, "%c", packetReceiveBuffer[i]);
       b1[1]=0;
       Serial.print(b1);
     }
     Serial.println();
+    timer=10;
+    if(Udp.parsePacket()==0){
+    sendUDPpacket(SamuelServer); //Send an UDP packet to an echo server.
+    }
   }
-  delay(1000); // Wait one second
+  if(timer>0){
+    timer--;
+    }else{
+      Serial.println("Sending timeoutpacket: \n");
+      sendUDPpacket(SamuelServer); //Send an UDP packet to an echo server.
+      timer=10;
+      }
+   
+  delay(500); // Wait one second
 }
 
 unsigned long sendUDPpacket(IPAddress& address)
 {
-  memset(packetBuffer, 0, PACKET_SIZE); // Set all bytes in the buffer to 0
+  memset(packetSendBuffer, 0, PACKET_SIZE); // Set all bytes in the buffer to 0
   int counter = 0;
-  packetBuffer[counter++]  = 'P'; 
-  packetBuffer[counter++]  = 'a';
-  packetBuffer[counter++]  = 'c';
-  packetBuffer[counter++]  = 'k';
-  packetBuffer[counter++]  = 'e';
-  packetBuffer[counter++]  = 't';
-  packetBuffer[counter++]  = 'N';
-  packetBuffer[counter++]  = 'r';
-  packetBuffer[counter++]  = ':';
-  packetBuffer[counter++]  = ' ';
-  packetBuffer[counter++]  = packetNr2;
-  packetBuffer[counter++]  = packetNr1;
-  packetBuffer[counter++]  = packetNr0;
+  packetSendBuffer[counter++]  = 'P'; 
+  packetSendBuffer[counter++]  = 'a';
+  packetSendBuffer[counter++]  = 'c';
+  packetSendBuffer[counter++]  = 'k';
+  packetSendBuffer[counter++]  = 'e';
+  packetSendBuffer[counter++]  = 't';
+  packetSendBuffer[counter++]  = 'N';
+  packetSendBuffer[counter++]  = 'r';
+  packetSendBuffer[counter++]  = ':';
+  packetSendBuffer[counter++]  = ' ';
+  packetSendBuffer[counter++]  = packetNr2;
+  packetSendBuffer[counter++]  = packetNr1;
+  packetSendBuffer[counter++]  = packetNr0;
 
   
   Udp.beginPacket(address, localPort);
-  Udp.write(packetBuffer, PACKET_SIZE);
+  Udp.write(packetSendBuffer, PACKET_SIZE);
   Udp.endPacket();
 
   //Put the packet numbers to a printable string
