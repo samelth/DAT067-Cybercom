@@ -1,38 +1,35 @@
 #include <MKRNB.h>
 
 #include "arduino_secrets.h"
+#include "PacketEcho_UDP.h"
 // Please enter your sensitive data in the Secret tab or arduino_secrets.h
 // PIN Number
-const char PINNUMBER[]     = SECRET_PINNUMBER;
+const char PINNUMBER[] = SECRET_PINNUMBER;
 
-unsigned int localPort = 2390;      // Local port to listen for UDP packets
-
-IPAddress VictorServer(188, 149, 54, 45); // Victor's echo server
-IPAddress SamuelServer(83, 252, 118, 131); // Samuel's echo server
-IPAddress KarlServer(85, 230, 107, 67); // Karl's echo server
-IPAddress WilliamsServer(188,148,194,26); // William's echo server
+IPAddress victorServer(188, 149, 54, 45); // Victor's echo server
+IPAddress samuelServer(83, 252, 118, 131); // Samuel's echo server
+IPAddress karlServer(85, 230, 107, 67); // Karl's echo server
+IPAddress williamServer(188,148,194,26); // William's echo server
+IPAddress nullIP(0,0,0,0);
 
 const int PACKET_SIZE = 128;
+const uint16_t rxPort = 2390;
+const uint16_t txPort = 2390;
+const IPAddress &txIP = victorServer;
 
-byte packetSendBuffer[PACKET_SIZE]; //buffer to hold incoming and outgoing packets
-byte packetReceiveBuffer[PACKET_SIZE];
+byte rxBuffer[PACKET_SIZE];
+byte txBuffer[PACKET_SIZE];
 
-// Initialize the library instance
+byte failBuffer[PACKET_SIZE];
+
+int rxPkt = 0;
+int txPkt = 0;
+
 GPRS gprs;
-NB nbAccess;
-NBScanner scanner;
+NB nb;
+NBScanner nbScanner;
+NBUDP nbUdp;
 
-//If current IP address is equal to this nullIP we need to reconnect before we send any data.
-IPAddress nullIP= IPAddress(0,0,0,0);
-int timer=10;
-
-//Packet identifiers
-char packetNr0='0';
-char packetNr1='0';
-char packetNr2='0';
-
-// A UDP instance to let us send and receive packets over UDP
-NBUDP Udp;
 void setup()
 {
   // Open serial communications and wait for port to open:
@@ -40,152 +37,195 @@ void setup()
   while (!Serial) {
     ; // wait for serial port to connect. Needed for native USB port only
   }
-
-  Serial.println("Starting PacketEcho Client...");
+  Serial.println("Starting PacketEcho client..");
   connect();
-  Serial.println("\nStarting connection to server...");
-  Udp.begin(localPort);
-  sendUDPpacket(SamuelServer); //Send an UDP packet to an echo server.
+  nbUdp.begin(rxPort);
 }
-
-
 
 void loop()
 {
-  //When running the program, send 'p' via serial to access the pause menu.
-  if(Serial.read()==112){
-    Serial.println("Pause Menu, press a number! \n 1. Your IP address \n 2. Current signal strength \n 3. Current carrier \n 4. Reconnect");
-     delay(500);
-     while(Serial.read()!=112){
-      int s = Serial.read();
-      while(s!=-1){
-        switch(s){
-          case 49: 
-           Serial.println(gprs.getIPAddress());
-           break;
-         case 50:
-          Serial.println(scanner.getSignalStrength());
-          break;
-         case 51:
-          Serial.println(scanner.getCurrentCarrier());
-          break;
-         case 52:
-          connect();
-          break;
-         default:
-          break;
-        }
-        s=Serial.read();
-      }
-    }
-  }
-  if(gprs.getIPAddress()== nullIP){
-    Serial.print("Connection lost.\n");
-    connect();
-    }
-  Serial.print("");
-  
-  
-  delay(500); //Wait two seconds
-   if(Udp.parsePacket()!=0) {  //If there are incoming packets on buffer, print them FCFS.
-    Serial.print("Received ");
-    int chars = Udp.read(packetReceiveBuffer, PACKET_SIZE); // Read the packet into the buffer
-    /*
-     * Convert the bytes to printable characters and print them.
-     * Terminate either on number of characters actually received 
-     * or a null character which means end of string.
-     * Both conditions are needed here to avoid out of bounds
-     * access of data.
-     */
-    for(int i=0;i<chars && packetReceiveBuffer[i] > 0;i++)
-    {
-      char b1[2];
-      sprintf(b1, "%c", packetReceiveBuffer[i]);
-      b1[1]=0;
-      Serial.print(b1);
-    }
-    Serial.println();
-    timer=10;
-    if(Udp.parsePacket()==0){
-    sendUDPpacket(SamuelServer); //Send an UDP packet to an echo server.
-    }
-  }
-  if(timer>0){
-    timer--;
-    }else{
-      Serial.println("Sending timeoutpacket: \n");
-      sendUDPpacket(SamuelServer); //Send an UDP packet to an echo server.
-      timer=10;
-      }
-   
-  delay(500); // Wait one second
+  checkSerialInput();
+  //checkConnection();
+  tx();
+  delay(500);
+  rx();
+  delay(500);
+  printFailureRate();
+  delay(500);
 }
 
-unsigned long sendUDPpacket(IPAddress& address)
+void connect()
 {
-  memset(packetSendBuffer, 0, PACKET_SIZE); // Set all bytes in the buffer to 0
-  int counter = 0;
-  packetSendBuffer[counter++]  = 'P'; 
-  packetSendBuffer[counter++]  = 'a';
-  packetSendBuffer[counter++]  = 'c';
-  packetSendBuffer[counter++]  = 'k';
-  packetSendBuffer[counter++]  = 'e';
-  packetSendBuffer[counter++]  = 't';
-  packetSendBuffer[counter++]  = 'N';
-  packetSendBuffer[counter++]  = 'r';
-  packetSendBuffer[counter++]  = ':';
-  packetSendBuffer[counter++]  = ' ';
-  packetSendBuffer[counter++]  = packetNr2;
-  packetSendBuffer[counter++]  = packetNr1;
-  packetSendBuffer[counter++]  = packetNr0;
-
-  
-  Udp.beginPacket(address, localPort);
-  Udp.write(packetSendBuffer, PACKET_SIZE);
-  Udp.endPacket();
-
-  //Put the packet numbers to a printable string
-  char *pNr; 
-  pNr =(char*) malloc(4*sizeof(char));
-  pNr[0]=packetNr2;
-  pNr[1]=packetNr1;
-  pNr[2]=packetNr0;
-  pNr[3]='\0';
-  incPacketNr();
-  
-  Serial.print("Sending packet: ");
-  Serial.println(pNr);
-  free(pNr);
-}
-
-void incPacketNr(){
-  packetNr0++;
-  if(packetNr0==':'){
-    packetNr0='0';
-    packetNr1++;
-    if(packetNr1==':'){
-      packetNr1='0';
-      packetNr2++;
-      if(packetNr2==':'){
-        packetNr2='0';
-      }
-    }
-  }
-}
-
-void connect(){
-  Serial.println("Connecting...");
-    boolean connected = false;
+  Serial.println("Connecting..");
+  bool connected = false;
   // After starting the modem with NB.begin()
   // attach the shield to the GPRS network with the APN, login and password
   while (!connected) {
-    if ((nbAccess.begin(PINNUMBER) == NB_READY) &&
+    if ((nb.begin(PINNUMBER) == NB_READY) &&
         (gprs.attachGPRS() == GPRS_READY)) {
       connected = true;
     } else {
-      Serial.println("Not connected, trying again..");
+      Serial.println("Connection failed. Trying again..");
       delay(1000);
     }
   }
-  Serial.println("Success!");
+  Serial.println("Connected.");
+}
+
+void checkSerialInput()
+{
+  //When running the program, send 'p' via serial to access the pause menu.
+  if(Serial.read() == 'p')
+  {
+    Serial.println("Pause menu - enter a number, or 'p' to unpause.\n 1. Your IP address \n 2. Current signal strength \n 3. Current carrier \n 4. Reconnect");
+    delay(500);
+    while(Serial.read() != 'p')
+    {
+      int s = Serial.read();
+      while(s !=- 1)
+      {
+        switch(s)
+        {
+        case '1': 
+          Serial.println(gprs.getIPAddress());
+          break;
+        case '2':
+          Serial.println(nbScanner.getSignalStrength());
+          break;
+        case '3':
+          Serial.println(nbScanner.getCurrentCarrier());
+          break;
+        case '4':
+          connect();
+          break;
+        default:
+          break;
+        }
+        s = Serial.read();
+      }
+    }
   }
+}
+
+void checkConnection()
+{
+  if(gprs.getIPAddress() == nullIP)
+  {
+    Serial.println("Connection lost.");
+    connect();
+  }
+}
+
+void tx()
+{
+  clearBuffer(txBuffer, PACKET_SIZE);
+  int index = 0;
+  txBuffer[index++]  = 'p';
+  txBuffer[index++]  = 'k';
+  txBuffer[index++]  = 't';
+  txBuffer[index++]  = 'N';
+  txBuffer[index++]  = 'o';
+  txBuffer[index++]  = ' ';
+  index = insertInt(txBuffer, PACKET_SIZE, index, txPkt + 1);
+  nbUdp.beginPacket(txIP, txPort);
+  nbUdp.write(txBuffer, PACKET_SIZE);
+  nbUdp.endPacket();
+  txPkt++;
+  Serial.print("Sent: ");
+  printBuffer(txBuffer);
+  Serial.println();
+}
+
+void rx()
+{
+  int rxSize = 0;
+  int rxAttempts = 0;
+  while(!(rxSize = nbUdp.parsePacket()) && (rxAttempts++ < 10))
+  {
+    delay(500);
+  }
+  
+  if(rxSize)
+  {
+    rxPkt++;
+    clearBuffer(rxBuffer, PACKET_SIZE);
+    rxSize = nbUdp.read(rxBuffer, PACKET_SIZE);
+    Serial.print("Received: ");
+    printBuffer(rxBuffer);
+    Serial.println();
+  }
+}
+
+void clearBuffer(byte *buffer, int len)
+{
+  memset(buffer, 0, len);
+}
+
+int insertInt(byte *buffer, int len, int index, int n)
+{
+  int i = index;
+  if(i >= len - 1)
+  {
+    Serial.println("Buffer full.");
+    return i;
+  }
+
+  if(n / 10 == 0)
+  {
+    buffer[i] = n + '0';
+    return i;
+  }
+
+  int a = n;
+  int b = 1;
+  int c;
+  int d;
+
+  while(a / 10)
+  {
+    a /= 10;
+    b *= 10;
+  }
+
+  buffer[i++] = a + '0';
+  b *= a;
+  c = (n / 10);
+  d = n - b;
+
+  while(d / 10)
+  {
+    c /= 10;
+    d /= 10;
+  }
+
+  while(c / 10)
+  {
+    c /= 10;
+    buffer[i++] = '0';
+  }
+
+  insertInt(buffer, len, i, n - b);
+}
+
+void printBuffer(byte *buffer)
+{
+  int i = 0;
+  while(buffer[i])
+  {
+    char b1[2];
+    sprintf(b1, "%c", buffer[i++]);
+    b1[1] = 0;
+    Serial.print(b1);
+  }
+}
+
+void printFailureRate()
+{
+  Serial.print("Failure rate: ");
+  clearBuffer(failBuffer, PACKET_SIZE);
+  int index = insertInt(failBuffer, PACKET_SIZE, 0, txPkt - rxPkt);
+  failBuffer[index + 1] = '/';
+  insertInt(failBuffer, PACKET_SIZE, index + 2, txPkt);
+  printBuffer(failBuffer);
+  Serial.println();
+}
