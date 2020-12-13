@@ -15,7 +15,7 @@ IPAddress nullIP(0,0,0,0);
 const int PACKET_SIZE = 128;
 const uint16_t rxPort = 2390;
 const uint16_t txPort = 2390;
-const IPAddress &txIP = victorServer;
+const IPAddress &txIP = samuelServer;
 
 byte rxBuffer[PACKET_SIZE];
 byte txBuffer[PACKET_SIZE];
@@ -24,6 +24,9 @@ byte failBuffer[PACKET_SIZE];
 
 int rxPkt = 0;
 int txPkt = 0;
+int socket;
+
+String response;
 
 GPRS gprs;
 NB nb;
@@ -39,20 +42,49 @@ void setup()
   }
   Serial.println("Starting PacketEcho client..");
   connect();
+  
+  //Close all sockets
+  for(int i=0;i<7;i++){
+    MODEM.sendf("AT+USOCL=%d",i);
+     if(MODEM.waitForResponse(2000, &response)!=1){
+    Serial.println("Socket already closed");
+    }else{
+       Serial.println("Socket closed");
+      }
+    delay(200);
+  }
+  
   nbUdp.begin(rxPort);
+  socket = nbUdp.getSocket();
 }
 
 void loop()
 {
   checkSerialInput();
-  //checkConnection();
   tx();
   delay(500);
   rx();
   delay(500);
   printFailureRate();
   delay(500);
+  resetUdpSocket();
+  Serial.println();
 }
+
+void resetUdpSocket(){
+  MODEM.sendf("AT+USOCL=%d",socket);
+   if(MODEM.waitForResponse(2000, &response)!=1){
+    // (AT+USOCTL=<socket>,1) Returns the last IP stack error code produced while operating on <socket>.
+    // Very useful for debugging. Error codes are found in SARA R4 AT command pdf (Appendix 5). 
+    Serial.println("Error number: ");
+    MODEM.sendf("AT+USOCTL=%d,1",socket); 
+    }else{
+       //Serial.println("Socket closed");
+      }
+      //Open socket
+      nbUdp.begin(rxPort);
+      socket = nbUdp.getSocket();
+  }
 
 void connect()
 {
@@ -104,15 +136,6 @@ void checkSerialInput()
         s = Serial.read();
       }
     }
-  }
-}
-
-void checkConnection()
-{
-  if(gprs.getIPAddress() == nullIP)
-  {
-    Serial.println("Connection lost.");
-    connect();
   }
 }
 
