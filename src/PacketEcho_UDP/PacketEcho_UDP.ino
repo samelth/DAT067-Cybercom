@@ -15,7 +15,7 @@ IPAddress nullIP(0,0,0,0);
 const int PACKET_SIZE = 128;
 const uint16_t rxPort = 2390;
 const uint16_t txPort = 2390;
-const IPAddress &txIP = samuelServer;
+const IPAddress &txIP = williamServer;
 
 byte rxBuffer[PACKET_SIZE];
 byte txBuffer[PACKET_SIZE];
@@ -232,14 +232,7 @@ int insertInt(byte *buffer, int len, int index, int n)
 
 void printBuffer(byte *buffer)
 {
-  int i = 0;
-  while(buffer[i])
-  {
-    char b1[2];
-    sprintf(b1, "%c", buffer[i++]);
-    b1[1] = 0;
-    Serial.print(b1);
-  }
+  Serial.println((char *) buffer);
 }
 
 void printFailureRate()
