@@ -41,6 +41,7 @@ void setup()
     ; // wait for serial port to connect. Needed for native USB port only
   }
   Serial.println("Starting PacketEcho client..");
+  
   connect();
   
   //Close all sockets
@@ -73,18 +74,18 @@ void loop()
 
 void resetUdpSocket(){
   MODEM.sendf("AT+USOCL=%d",socket);
-   if(MODEM.waitForResponse(2000, &response)!=1){
-    // (AT+USOCTL=<socket>,1) Returns the last IP stack error code produced while operating on <socket>.
-    // Very useful for debugging. Error codes are found in SARA R4 AT command pdf (Appendix 5). 
-    Serial.println("Error number: ");
-    MODEM.sendf("AT+USOCTL=%d,1",socket); 
-    }else{
-       //Serial.println("Socket closed");
-      }
-      //Open socket
-      nbUdp.begin(rxPort);
-      socket = nbUdp.getSocket();
+  if(MODEM.waitForResponse(2000, &response)!=1){
+  // (AT+USOCTL=<socket>,1) Returns the last IP stack error code produced while operating on <socket>.
+  // Very useful for debugging. Error codes are found in SARA R4 AT command pdf (Appendix 5). 
+  Serial.println("Error number: ");
+  MODEM.sendf("AT+USOCTL=%d,1",socket); 
+  }else{
+     //Serial.println("Socket closed");
   }
+  //Open socket
+  nbUdp.begin(rxPort);
+  socket = nbUdp.getSocket();
+}
 
 void connect()
 {
@@ -168,14 +169,15 @@ void rx()
     delay(500);
   }
   
-  if(rxSize)
+  while(rxSize)
   {
     rxPkt++;
     clearBuffer(rxBuffer, PACKET_SIZE);
-    rxSize = nbUdp.read(rxBuffer, PACKET_SIZE);
+    nbUdp.read(rxBuffer, PACKET_SIZE);
     Serial.print("Received: ");
     printBuffer(rxBuffer);
-    Serial.println();
+    delay(500);
+    rxSize = nbUdp.parsePacket();
   }
 }
 
@@ -186,53 +188,37 @@ void clearBuffer(byte *buffer, int len)
 
 int insertInt(byte *buffer, int len, int index, int n)
 {
-  int i = index;
-  if(i >= len - 1)
-  {
-    Serial.println("Buffer full.");
-    return i;
-  }
+  if(index >= len - 1)
+    return index;
 
-  if(n / 10 == 0)
-  {
-    buffer[i] = n + '0';
-    return i;
-  }
-
+  int noOfDigits = 1;
   int a = n;
-  int b = 1;
-  int c;
-  int d;
+  while(a /= 10)
+    noOfDigits++;
+  
+  int resultingLen = index + noOfDigits + (n < 0 ? 1 : 0);
 
-  while(a / 10)
+  if(resultingLen >= len)
+    return index;
+
+  if(n < 0)
   {
-    a /= 10;
-    b *= 10;
+    buffer[index] = '-';
+    return insertInt(buffer, len, index + 1, ~n + 1);
   }
 
-  buffer[i++] = a + '0';
-  b *= a;
-  c = (n / 10);
-  d = n - b;
-
-  while(d / 10)
+  int i = index + noOfDigits - 1;
+  while(i >= index)
   {
-    c /= 10;
-    d /= 10;
+    buffer[i--] = n % 10 + '0';
+    n /= 10;
   }
-
-  while(c / 10)
-  {
-    c /= 10;
-    buffer[i++] = '0';
-  }
-
-  insertInt(buffer, len, i, n - b);
+  return index + noOfDigits;
 }
 
 void printBuffer(byte *buffer)
 {
-  Serial.println((char *) buffer);
+  Serial.println((char *)buffer);
 }
 
 void printFailureRate()
@@ -240,8 +226,9 @@ void printFailureRate()
   Serial.print("Failure rate: ");
   clearBuffer(failBuffer, PACKET_SIZE);
   int index = insertInt(failBuffer, PACKET_SIZE, 0, txPkt - rxPkt);
-  failBuffer[index + 1] = '/';
-  insertInt(failBuffer, PACKET_SIZE, index + 2, txPkt);
+  if(index >= PACKET_SIZE)
+    return;
+  failBuffer[index++] = '/';
+  insertInt(failBuffer, PACKET_SIZE, index, txPkt);
   printBuffer(failBuffer);
-  Serial.println();
 }
