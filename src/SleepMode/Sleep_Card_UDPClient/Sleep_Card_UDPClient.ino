@@ -1,4 +1,5 @@
 #include <MKRNB.h>
+#include <NB.h>
 
 #include "arduino_secrets.h"
 #include "ArduinoLowPower.h"
@@ -37,7 +38,7 @@ NBUDP nbUdp;
 void setup()
 {
   // Open serial communications and wait for port to open:
-  Serial.begin(9600);
+  Serial.begin(115200);
   while (!Serial) {
     ; // wait for serial port to connect. Needed for native USB port only
   }
@@ -62,7 +63,6 @@ void setup()
 
 void loop()
 {
-  checkSerialInput();
   tx();
   delay(500);
   rx();
@@ -71,23 +71,23 @@ void loop()
   delay(500);
   resetUdpSocket();
   Serial.println();
-  LowPower.sleep(2000);
+  delay(1000);
  }
 
 void resetUdpSocket(){
   MODEM.sendf("AT+USOCL=%d",socket);
-   if(MODEM.waitForResponse(2000, &response)!=1){
-    // (AT+USOCTL=<socket>,1) Returns the last IP stack error code produced while operating on <socket>.
-    // Very useful for debugging. Error codes are found in SARA R4 AT command pdf (Appendix 5). 
-    Serial.println("Error number: ");
-    MODEM.sendf("AT+USOCTL=%d,1",socket); 
-    }else{
-       //Serial.println("Socket closed");
-      }
-      //Open socket
-      nbUdp.begin(rxPort);
-      socket = nbUdp.getSocket();
+  if(MODEM.waitForResponse(2000, &response)!=1){
+  // (AT+USOCTL=<socket>,1) Returns the last IP stack error code produced while operating on <socket>.
+  // Very useful for debugging. Error codes are found in SARA R4 AT command pdf (Appendix 5). 
+  Serial.println("Error number: ");
+  MODEM.sendf("AT+USOCTL=%d,1",socket); 
+  }else{
+     //Serial.println("Socket closed");
   }
+  //Open socket
+  nbUdp.begin(rxPort);
+  socket = nbUdp.getSocket();
+}
 
 void connect()
 {
@@ -145,14 +145,7 @@ void checkSerialInput()
 void tx()
 {
   clearBuffer(txBuffer, PACKET_SIZE);
-  int index = 0;
-  txBuffer[index++]  = 'p';
-  txBuffer[index++]  = 'k';
-  txBuffer[index++]  = 't';
-  txBuffer[index++]  = 'N';
-  txBuffer[index++]  = 'o';
-  txBuffer[index++]  = ' ';
-  index = insertInt(txBuffer, PACKET_SIZE, index, txPkt + 1);
+  memcpy(txBuffer,failBuffer, PACKET_SIZE); 
   nbUdp.beginPacket(txIP, txPort);
   nbUdp.write(txBuffer, PACKET_SIZE);
   nbUdp.endPacket();
@@ -255,3 +248,16 @@ void blink(int delay_time){
   delay(delay_time);
   digitalWrite(LED_BUILTIN, LOW);
 }
+
+void turnOffRadio(){
+  MODEM.send("AT+CFUN=0");
+  MODEM.waitForResponse(180000);
+}
+void turnOnRadio(){
+  MODEM.send("AT+CFUN=1");
+  MODEM.waitForResponse(180000);
+}
+  
+    
+
+void dummy(){}
